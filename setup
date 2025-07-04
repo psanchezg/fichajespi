@@ -1,12 +1,18 @@
- #!/bin/bash
+#!/bin/bash
+
+set -e  # Salir si cualquier comando falla
+
+USER_HOME="$HOME"
+CURRENT_USER="$USER"
+
 echo "#####################__Creando carpeta database__"
-mkdir /home/pi/database_data
+mkdir -p "$USER_HOME/database_data"
 
 echo "#####################__Actualizando__"
 sudo apt-get update && sudo apt-get -y upgrade
 
-echo "#####################__Clonando repositorio"
-git clone https://github.com/alejandroferrin/fichajespi.git
+echo "#####################__Clonando repositorio__"
+git clone https://github.com/alejandroferrin/fichajespi.git "$USER_HOME/fichajespi"
 
 echo "#####################__Instalando JDK__"
 #sudo apt -y install openjdk-11-jdk
@@ -16,41 +22,96 @@ echo "#####################__Instalando SmartCard Reader__"
 sudo apt-get -y install subversion autoconf debhelper flex libusb-dev libpcsclite-dev libpcsclite1 libccid pcscd pcsc-tools libpcsc-perl libusb-1.0-0-dev libtool libssl-dev cmake checkinstall
 
 echo "#####################__Instalando ACS driver__"
-sudo dpkg -i /home/pi/fichajespi/DriverACS/libacsccid1_1.1.8-1~bpo10+1_armhf.deb
+sudo dpkg -i "$USER_HOME/fichajespi/DriverACS/libacsccid1_1.1.8-1~bpo10+1_armhf.deb"
 
 echo "#####################__Instalando Docker__"
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
+
 echo "#####################__Dando permisos usuario para grupo docker__"
-sudo usermod -aG docker pi
+sudo usermod -aG docker "$CURRENT_USER"
+
 echo "#####################__Instalando docker-compose__"
 sudo apt -y install docker-compose
 
 echo "#####################__Instalando vim__"
 sudo apt -y install vim
+
 echo "#####################__Instalando vnc__"
 sudo apt -y install realvnc-vnc-server realvnc-vnc-viewer
 
 echo "#####################__Compilando app de escritorio__"
 sudo apt -y install maven
-cd /home/pi/fichajespi/fichajesPi_desktop
+cd "$USER_HOME/fichajespi/fichajesPi_desktop"
 mvn clean package
 
 echo "#####################__Configurando servicio pcscd__"
-sudo sed -i '$d' /etc/rc.local
-sudo echo "sudo systemctl start pcscd" >> /etc/rc.local
-sudo echo "exit 0" >> /etc/rc.local
+sudo systemctl enable pcscd
 
-sudo cp /home/pi/fichajespi/fichajespi.desktop /etc/xdg/autostart/
+echo "#####################__Configurando entorno gráfico__"
+sudo systemctl enable lightdm
 
-sudo sed -i '1 s/^/#/' /etc/xdg/lxsession/LXDE-pi/autostart
+# Añadir al autostart
+sudo cp "$USER_HOME/fichajespi/fichajespi.desktop" /etc/xdg/autostart/
+
+# Comentar primera línea del autostart LXDE-pi si existe
+AUTOSTART_FILE="/etc/xdg/lxsession/LXDE-pi/autostart"
+AUTOSTART_FILE="/etc/xdg/lxsession/LXDE-pi/autostart"
+
+# Verificar que el fichero existe
+if [ -f "$AUTOSTART_FILE" ]; then
+  # Crear copia de seguridad
+  sudo cp "$AUTOSTART_FILE" "$AUTOSTART_FILE.bak"
+
+  # Comentar las líneas que no empiezan por "#"
+  sudo sed -i '/^[^#]/ s|^|##|' "$AUTOSTART_FILE"
+fi
+
+XORG_CONF_DIR="/etc/X11/xorg.conf.d"
+XORG_CONF_FILE="$XORG_CONF_DIR/99-fbdev.conf"
+
+echo "Creando directorio $XORG_CONF_DIR si no existe..."
+sudo mkdir -p "$XORG_CONF_DIR"
+
+echo "Escribiendo configuración en $XORG_CONF_FILE..."
+
+sudo tee "$XORG_CONF_FILE" > /dev/null <<EOF
+Section "Device"
+    Identifier "LCD"
+    Driver "fbdev"
+    Option "fbdev" "/dev/fb1"
+EndSection
+
+Section "Screen"
+    Identifier "Screen0"
+    Device     "LCD"
+    Monitor    "Monitor0"
+    DefaultDepth 16
+    SubSection "Display"
+        Depth     16
+        Modes     "480x320"
+    EndSubSection
+EndSection
+
+Section "Monitor"
+    Identifier "Monitor0"
+EndSection
+
+Section "ServerLayout"
+    Identifier "DefaultLayout"
+    Screen     "Screen0"
+EndSection
+EOF
+
+echo "export FRAMEBUFFER=/dev/fb1" >> "$USER_HOME/.profile"
+
 
 echo "#####################__Instalando drivers pantalla táctil 3.5__"
-cd /home/pi/fichajespi
+cd "$USER_HOME/fichajespi"
 git clone https://github.com/goodtft/LCD-show.git
 chmod -R 755 LCD-show
 cd LCD-show/
 sudo ./LCD35-show
 
 echo "#####################__Reinicio necesario__"
-echo "#####################__Ahora apaga la raspberry, instala la pantalla táctil y vuelve a encenderla__"
+echo "#####################__Ahora apaga la Raspberry, instala la pantalla táctil y vuelve a encenderla__"

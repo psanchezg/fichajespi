@@ -1,5 +1,3 @@
-version: '3.1'
-
 services:
   db:
     container_name: fichajespi_db
@@ -13,6 +11,11 @@ services:
       - MYSQL_USER=fichajes #Cambiar usuario si se desea
       - MYSQL_PASSWORD=fichajes #Cambiar password si se desea
     restart: always
+    volumes:
+      - $HOME/database_data:/config/databases
+      - $HOME/database_logs:/config/logs
+    networks:
+      - db-net
 
   backendserver:
     container_name: fichajespi_back
@@ -30,11 +33,12 @@ services:
       - JWT_SECRET=your-secret-key #Secret key for JWT tokens
     ports:
       - "8080:8080"
-    links:
-      - "db"
     depends_on:
-      - "db"
+      - db
     restart: always
+    networks:
+      - db-net
+      - backend-net
 
   frontend:
     container_name: fichajespi_front
@@ -47,6 +51,8 @@ services:
     environment:
       - TZ=Europe/Madrid
     restart: always
+    networks:
+      - backend-net
 
   phpmyadmin:
     container_name: fichajespi_dbadmin
@@ -55,6 +61,33 @@ services:
       - 81:80
     environment:
       - PMA_ARBITRARY=1
-    restart: always
+    restart: unless-stopped
+    networks:
+      - db-net
 
+  backup:
+    image: ghcr.io/aranova/docker-alpine-cron:latest
+    restart: unless-stopped
+    platform: linux/arm/v7
+    environment:
+      - 'CRON_STRINGS=5 5 * * * /mysql/backup.sh\n0 5 * * * /aws/deleteOld.sh 20'
+      - DB_DUMP_TARGET=s3://bucket/folder #Cambiar
+      - DB_USER=root
+      - DB_PASS=fichajesroot #Cambiar password si se desea
+      - DB_SERVER=db
+      - DB_NAMES=db_fichajespi
+      - RUN_ONCE=true
+      - AWS_ACCESS_KEY_ID=key_id #Cambiar
+      - AWS_SECRET_ACCESS_KEY=access_key #Cambiar
+      - AWS_DEFAULT_REGION=eu-south-2 #Cambiar
+      - AWS_ENDPOINT_URL=https:/s3.eu-south-2.amazonaws.com #Cambiar
 
+      - MYSQLDUMP_OPTS=--skip-ssl
+    depends_on:
+      - db
+    networks:
+      - db-net
+
+networks:
+  db-net:
+  backend-net:
