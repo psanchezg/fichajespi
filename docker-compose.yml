@@ -1,25 +1,40 @@
 services:
+  # ---- PostgreSQL (por defecto) ----
+  # Para usar MySQL/MariaDB, comenta este bloque y descomenta el bloque "mariadb".
   db:
-    image: linuxserver/mariadb:10.5.13
+    image: postgres:17
     environment:
-      - MYSQL_ROOT_PASSWORD= #añadir contraseña
+      - POSTGRES_DB=db_fichajespi
+      - POSTGRES_USER=fichajes
+      - POSTGRES_PASSWORD= #añadir contraseña
       - TZ=Europe/Madrid
-      - MYSQL_DATABASE=db_fichajespi #puedes añadir propio
-      - MYSQL_USER=fichajes #puedes añadir propio
-      - MYSQL_PASSWORD= #añadir contraseña
     restart: always
     volumes:
-      - $HOME/database_data:/config/databases
-      - $HOME/database_logs:/config/logs
+      - db_data:/var/lib/postgresql/data
     networks:
       - db
 
-  phpmyadmin:
-    image: phpmyadmin
+  # ---- Alternativa MySQL/MariaDB (descomentar y comentar el bloque "db" de arriba) ----
+  # mariadb:
+  #   image: linuxserver/mariadb:10.5.13
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD= #añadir contraseña
+  #     - TZ=Europe/Madrid
+  #     - MYSQL_DATABASE=db_fichajespi
+  #     - MYSQL_USER=fichajes
+  #     - MYSQL_PASSWORD= #añadir contraseña
+  #   restart: always
+  #   volumes:
+  #     - db_data:/config/databases
+  #     - db_logs:/config/logs
+  #   networks:
+  #     - db
+
+  # Interfaz web para la BD (compatible con PostgreSQL y MySQL)
+  adminer:
+    image: adminer
     ports:
-      - "81:80"
-    environment:
-      - PMA_ARBITRARY=1
+      - "81:8080"
     restart: unless-stopped
     depends_on:
       - db
@@ -38,15 +53,24 @@ services:
 
   backend:
     image: fichajespi_back:latest # puede usar mi imagen o construir la suya
-    
+
     environment:
       - TZ=Europe/Madrid
 
-      - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/db_fichajespi
-      - SPRING_DATASOURCE_USERNAME=fichajes #puede cambiar el usuario
-      - SPRING_DATASOURCE_PASSWORD= #añadir contraseña 
+      # POSTGRESQL
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/db_fichajespi
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.PostgreSQLDialect
 
-      # Ajustar correo según cómo lo use tu backend 
+      # MYSQL
+      # - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/db_fichajespi
+      # - SPRING_DATASOURCE_DRIVER_CLASS_NAME=com.mysql.cj.jdbc.Driver
+      # - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.MySQL5Dialect
+
+      - SPRING_DATASOURCE_USERNAME=fichajes #puede cambiar el usuario
+      - SPRING_DATASOURCE_PASSWORD= #añadir contraseña
+
+      # Ajustar correo según cómo lo use tu backend
       - CLIENT_URL=http://localhost
 
       - SPRING_MAIL_HOST= #puedes añadir propio
@@ -66,4 +90,5 @@ networks:
   db:
 
 volumes:
-  db:
+  db_data:
+  db_logs:

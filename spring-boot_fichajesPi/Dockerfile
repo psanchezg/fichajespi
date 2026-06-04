@@ -1,8 +1,10 @@
-FROM maven:3.8.4-eclipse-temurin-11 AS build 
+# ---- Build stage ----
+FROM maven:3.9-eclipse-temurin-17 AS build
 COPY src /home/app/src
 COPY pom.xml /home/app
 RUN mvn -f /home/app/pom.xml clean package -DskipTests
 
-FROM eclipse-temurin:11-jdk-focal
-COPY --from=build "home/app/target/fichajesPi.backend-0.0.1-SNAPSHOT.jar" "app.jar"
-ENTRYPOINT ["java","-jar","app.jar"]
+# ---- Runtime stage (distroless: sin shell, sin gestor de paquetes, solo JRE + app) ----
+FROM gcr.io/distroless/java17-debian12
+COPY --from=build /home/app/target/fichajesPi.backend-0.0.1-SNAPSHOT.jar /app/app.jar
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
